@@ -6,9 +6,6 @@ import subprocess
 from string import Template
 from optparse import OptionParser
 
-CONFIG_API = "/api/v1/cluster/configuration"
-JSON_HEADER = {"Content-Type": "application/json"}
-
 CONNECTION_TEMPLATE = Template("""
 <Connection>
   Host "$host_name"
