@@ -1,8 +1,8 @@
 
 """ Generates the CollectD JMX configuration for Storm worker nodes
     based off of values pulled from the cluster's Ambari instance"""
-import urllib2
-import json
+import re
+import subprocess
 from string import Template
 from optparse import OptionParser
 
@@ -19,17 +19,16 @@ CONNECTION_TEMPLATE = Template("""
 """)
 
 
-def get_topology_configuration(config_host):
-    request = urllib2.Request(config_host + CONFIG_API)
-    for key, val in JSON_HEADER.items():
-        request.add_header(key, val)
-
-    response = urllib2.urlopen(request)
-    return json.load(response)
+def get_supervisor_slots():
+    proc = subprocess.Popen(['storm', 'remoteconfvalue',
+                             'supervisor.slots.ports'], stdout=subprocess.PIPE)
+    line = next(iter(proc.stdout or []), None)
+    return parse_slots(line)
 
 
-def get_supervisor_slots(configuration):
-    return configuration['supervisor.slots.ports']
+def parse_slots(config_line):
+    # Expects output as "supervisor.slots.ports: [6700 6701 ...]"
+    return re.search(r"\[([0-9 ]+)\]", config_line).group(1).split(" ")
 
 
 def create_connection_block(slot):
@@ -46,11 +45,6 @@ def get_worker_jmx_template(path_string):
 
 def generate_worker_config():
     parser = OptionParser()
-    # Cluster's that haven't experience any manual failover should have an etc/hosts
-    # reference to the headnode
-    parser.add_option("-u", "--url", dest="host", default='http://headnodehost:8744',
-                      help="Ambari server host. e.g. http://headnodehost:8744")
-
     parser.add_option("-t", "--template", dest="template", default="templates/worker_jmx.conf",
                       help="Template file location")
 
@@ -58,10 +52,8 @@ def generate_worker_config():
                       default="worker/collectd_oms_worker_jmx.conf", help="Output File")
 
     (options, _) = parser.parse_args()
-    config_host = options.host
 
-    configuration = get_topology_configuration(config_host)
-    slots = get_supervisor_slots(configuration)
+    slots = get_supervisor_slots()
     worker_connections = ""
     for slot in slots:
         worker_connections += create_connection_block(slot)
@@ -73,4 +65,5 @@ def generate_worker_config():
         worker_connections=worker_connections))
 
 
-generate_worker_config()
+if __name__ == '__main__':
+    generate_worker_config()
